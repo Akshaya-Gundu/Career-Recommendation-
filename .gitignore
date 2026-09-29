@@ -1,0 +1,7 @@
+node_modules/
+backend/career.db
+backend/career.db-journal
+backend/career.db-wal
+backend/career.db-shm
+frontend/dist/
+.DS_Store
