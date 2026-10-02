@@ -1,4 +1,6 @@
 node_modules/
+.env
+**/.env
 backend/career.db
 backend/career.db-journal
 backend/career.db-wal

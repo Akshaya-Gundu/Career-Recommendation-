@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
-import ProfileForm from "./pages/ProfileForm.jsx";
-import Recommendations from "./pages/Recommendations.jsx";
-import SkillGap from "./pages/SkillGap.jsx";
-import LearningPlan from "./pages/LearningPlan.jsx";
-import ProgressTracker from "./pages/ProgressTracker.jsx";
+
+const ProfileForm = lazy(() => import("./pages/ProfileForm.jsx"));
+const Recommendations = lazy(() => import("./pages/Recommendations.jsx"));
+const SkillGap = lazy(() => import("./pages/SkillGap.jsx"));
+const LearningPlan = lazy(() => import("./pages/LearningPlan.jsx"));
+const ProgressTracker = lazy(() => import("./pages/ProgressTracker.jsx"));
 
 export default function App() {
   const [studentId, setStudentId] = useState(() => localStorage.getItem("studentId") || null);
@@ -36,6 +37,7 @@ export default function App() {
     <div className="app-shell">
       <Sidebar studentName={studentName} />
       <main className="main">
+        <Suspense fallback={<div className="page-loading">Loading page…</div>}>
         <Routes>
           <Route path="/" element={<ProfileForm onCreated={handleProfileCreated} />} />
           <Route
@@ -60,6 +62,7 @@ export default function App() {
             element={<ProgressTracker studentId={studentId} career={selectedCareer} />}
           />
         </Routes>
+        </Suspense>
       </main>
     </div>
   );

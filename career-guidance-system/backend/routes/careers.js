@@ -2,32 +2,24 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 
-router.get("/", (req, res) => {
-  const careers = db.prepare("SELECT * FROM careers").all();
-  const result = careers.map((c) => ({
-    ...c,
-    skills: db
-      .prepare("SELECT skill_name AS name, weight FROM career_skills WHERE career_id = ?")
-      .all(c.id),
-    interests: db
-      .prepare("SELECT interest FROM career_interests WHERE career_id = ?")
-      .all(c.id)
-      .map((r) => r.interest)
-  }));
-  res.json(result);
+async function withDetails(career) {
+  const [skills, interests] = await Promise.all([
+    db.query("SELECT skill_name AS name, weight FROM career_skills WHERE career_id = $1", [career.id]),
+    db.query("SELECT interest FROM career_interests WHERE career_id = $1", [career.id])
+  ]);
+  return { ...career, skills: skills.rows, interests: interests.rows.map((r) => r.interest) };
+}
+router.get("/", async (req, res, next) => {
+  try {
+    const { rows } = await db.query("SELECT * FROM careers ORDER BY id");
+    res.json(await Promise.all(rows.map(withDetails)));
+  } catch (error) { next(error); }
 });
-
-router.get("/:id", (req, res) => {
-  const c = db.prepare("SELECT * FROM careers WHERE id = ?").get(req.params.id);
-  if (!c) return res.status(404).json({ error: "Career not found." });
-  c.skills = db
-    .prepare("SELECT skill_name AS name, weight FROM career_skills WHERE career_id = ?")
-    .all(c.id);
-  c.interests = db
-    .prepare("SELECT interest FROM career_interests WHERE career_id = ?")
-    .all(c.id)
-    .map((r) => r.interest);
-  res.json(c);
+router.get("/:id", async (req, res, next) => {
+  try {
+    const { rows } = await db.query("SELECT * FROM careers WHERE id = $1", [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: "Career not found." });
+    res.json(await withDetails(rows[0]));
+  } catch (error) { next(error); }
 });
-
 module.exports = router;

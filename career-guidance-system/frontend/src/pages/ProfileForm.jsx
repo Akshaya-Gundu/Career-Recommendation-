@@ -116,7 +116,7 @@ export default function ProfileForm({ onCreated }) {
             </div>
           ))}
           <button type="button" className="text-btn" onClick={() => setSkills((s) => [...s, emptySkill()])}>
-            + choose another file
+            + Add another skill
           </button>
         </div>
 

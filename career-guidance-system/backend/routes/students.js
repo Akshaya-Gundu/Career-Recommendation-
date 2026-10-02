@@ -2,73 +2,59 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 
-// Create a student profile
-router.post("/", (req, res) => {
+router.post("/", async (req, res, next) => {
   const { name, email, education, skills = [], interests = [], projects = [] } = req.body;
-
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: "Student name is required." });
+  if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "Student name is required." });
+  if (![skills, interests, projects].every(Array.isArray)) {
+    return res.status(400).json({ error: "Skills, interests, and projects must be arrays." });
   }
-
-  const insertStudent = db.prepare(
-    "INSERT INTO students (name, email, education) VALUES (?, ?, ?)"
-  );
-  const insertSkill = db.prepare(
-    "INSERT INTO student_skills (student_id, skill_name, proficiency) VALUES (?, ?, ?)"
-  );
-  const insertInterest = db.prepare(
-    "INSERT INTO student_interests (student_id, interest) VALUES (?, ?)"
-  );
-  const insertProject = db.prepare(
-    "INSERT INTO student_projects (student_id, title, description) VALUES (?, ?, ?)"
-  );
-
-  const createAll = db.transaction(() => {
-    const info = insertStudent.run(name.trim(), email || null, education || null);
-    const studentId = info.lastInsertRowid;
-
-    for (const s of skills) {
-      if (!s.name) continue;
-      insertSkill.run(studentId, s.name.trim(), Number(s.proficiency) || 1);
-    }
-    for (const i of interests) {
-      if (!i) continue;
-      insertInterest.run(studentId, String(i).trim().toLowerCase());
-    }
-    for (const p of projects) {
-      if (!p.title) continue;
-      insertProject.run(studentId, p.title.trim(), p.description || null);
-    }
-    return studentId;
-  });
-
-  const studentId = createAll();
-  res.status(201).json(getFullProfile(studentId));
+  let client;
+  let transactionStarted = false;
+  try {
+    client = await db.pool.connect();
+    await client.query("BEGIN");
+    transactionStarted = true;
+    const inserted = await client.query(
+      "INSERT INTO students (name, email, education) VALUES ($1, $2, $3) RETURNING id",
+      [name.trim(), email || null, education || null]
+    );
+    const id = inserted.rows[0].id;
+    for (const s of skills) if (s.name) await client.query(
+      "INSERT INTO student_skills (student_id, skill_name, proficiency) VALUES ($1, $2, $3)",
+      [id, s.name.trim(), Number(s.proficiency) || 1]
+    );
+    for (const i of interests) if (i) await client.query(
+      "INSERT INTO student_interests (student_id, interest) VALUES ($1, $2)", [id, String(i).trim().toLowerCase()]
+    );
+    for (const p of projects) if (p.title) await client.query(
+      "INSERT INTO student_projects (student_id, title, description) VALUES ($1, $2, $3)",
+      [id, p.title.trim(), p.description || null]
+    );
+    await client.query("COMMIT");
+    res.status(201).json(await getFullProfile(id));
+  } catch (error) {
+    if (transactionStarted) await client.query("ROLLBACK");
+    next(error);
+  } finally { client?.release(); }
 });
 
-// Get a student profile
-router.get("/:id", (req, res) => {
-  const profile = getFullProfile(req.params.id);
-  if (!profile) return res.status(404).json({ error: "Student not found." });
-  res.json(profile);
+router.get("/:id", async (req, res, next) => {
+  try {
+    const profile = await getFullProfile(req.params.id);
+    if (!profile) return res.status(404).json({ error: "Student not found." });
+    res.json(profile);
+  } catch (error) { next(error); }
 });
 
-function getFullProfile(studentId) {
-  const student = db.prepare("SELECT * FROM students WHERE id = ?").get(studentId);
-  if (!student) return null;
-
-  const skills = db
-    .prepare("SELECT skill_name AS name, proficiency FROM student_skills WHERE student_id = ?")
-    .all(studentId);
-  const interests = db
-    .prepare("SELECT interest FROM student_interests WHERE student_id = ?")
-    .all(studentId)
-    .map((r) => r.interest);
-  const projects = db
-    .prepare("SELECT title, description FROM student_projects WHERE student_id = ?")
-    .all(studentId);
-
-  return { ...student, skills, interests, projects };
+async function getFullProfile(id) {
+  const { rows: students } = await db.query("SELECT * FROM students WHERE id = $1", [id]);
+  if (!students[0]) return null;
+  const [skills, interests, projects] = await Promise.all([
+    db.query("SELECT skill_name AS name, proficiency FROM student_skills WHERE student_id = $1", [id]),
+    db.query("SELECT interest FROM student_interests WHERE student_id = $1", [id]),
+    db.query("SELECT title, description FROM student_projects WHERE student_id = $1", [id])
+  ]);
+  return { ...students[0], skills: skills.rows, interests: interests.rows.map((r) => r.interest), projects: projects.rows };
 }
 
 module.exports = router;
