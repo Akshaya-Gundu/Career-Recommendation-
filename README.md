@@ -32,7 +32,7 @@ Open `http://localhost:5173`. Vite proxies `/api` requests to the local backend.
 
 ## Vercel deployment
 
-Import the repository into Vercel with the repository root as the project root. `vercel.json` configures a static frontend build and a serverless Express API. Configure `DATABASE_URL` in Vercel's Environment Variables with the connection string for a hosted PostgreSQL database, then deploy.
+Import the repository into Vercel and set the project Root Directory to the directory containing this README and `vercel.json` (the repository root). Do not set it to `backend/` or `frontend/`. The root `package.json` provides the build script Vercel expects, and `vercel.json` configures the static frontend build and serverless Express API. Configure `DATABASE_URL` in Vercel's Environment Variables with the connection string for a hosted PostgreSQL database, then deploy.
 
 ## API routes
 
